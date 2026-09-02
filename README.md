@@ -6,24 +6,28 @@ A multi-tenant email scheduling and outreach platform built with **TypeScript**,
 
 ## 🏗️ System Architecture
 
-```
-[ React + Tailwind Frontend (Port 5173) ]
-                    │
-                    ▼  (Silent Polling @ 3000ms / no-store Cache Guard)
-[ Express.js REST API v1 (Port 4000) ] ◄──► [ PostgreSQL Database (Source of Truth) ]
-        │                   │
-        │ (Enqueues Job)    │ (Multi-Tenant User OAuth Tokens)
-        ▼                   ▼
-[ BullMQ Queue ] ──► [ Redis 7 ]
-        │
-        ▼ (Worker Pool @ WORKER_CONCURRENCY=5)
-[ Email Worker Engine ]
-   ├── 1. Atomic DB Claim (updateMany QUEUED -> PROCESSING)
-   ├── 2. Shared Redis Rate Limiter (ratelimit:email:<userId>:<YYYYMMDDHH>)
-   ├── 3. Multi-Tenant Dispatch (Gmail API / Ethereal SMTP)
-   ├── 4. Real Provider Response & Message-ID Persistence (PostgreSQL)
-   ├── 5. Async Search Document Indexing (Elasticsearch)
-   └── 6. Event-Driven Slack Notification (Deduplicated 1hr TTL)
+```mermaid
+flowchart TD
+    Client[React + Vite Frontend]
+    API[Express.js REST API]
+    DB[(PostgreSQL Database)]
+    Redis[(Redis 7)]
+    Queue[BullMQ Queue]
+    Worker[Email Worker Pool]
+    ES[(Elasticsearch)]
+    Gmail[Gmail REST API / Ethereal SMTP]
+    Slack[Slack Web API]
+
+    Client -->|REST API v1| API
+    API -->|Source of Truth| DB
+    API -->|Enqueue Jobs| Queue
+    Queue -->|State & Counters| Redis
+    Worker -->|Process Jobs| Queue
+    Worker -->|Atomic DB Claim| DB
+    Worker -->|Dispatch Email| Gmail
+    Worker -->|Index Documents| ES
+    Worker -->|Rate Limit Alerts| Slack
+    API -->|Full-Text Search| ES
 ```
 
 ---
@@ -145,6 +149,12 @@ Access the application at `http://localhost:5173`.
 - **Oracle Cloud Infrastructure (OCI) Always Free**: Designed to run within OCI Always Free Ampere A1 limits (up to 2 OCPUs, 12 GB RAM total per tenancy, and 200 GB Block Storage) with $0 expected infrastructure cost while within quotas.
 - **Idle Policy Notice**: OCI reserves the right to reclaim Always Free compute instances if official CPU, memory, and network idle criteria are met over a 7-day period.
 - **No Cron Architecture**: The system uses BullMQ delayed queues and PostgreSQL state persistence for scheduling and restart recovery. Application or OS cron jobs are not used.
+
+## 🗓️ Development Progression & Milestones
+
+- **Phase 1 — Core Foundation**: Express.js TypeScript setup, Prisma PostgreSQL schema design, Redis connection, BullMQ queue integration, and baseline Vite React client layout.
+- **Phase 2 — Integrations & Services**: Google OAuth 2.0, Gmail REST API dispatch engine, Ethereal SMTP Nodemailer transport, Elasticsearch multi-field full-text search, and Slack OAuth with deduplicated rate-limit alerts.
+- **Phase 3 — Production Hardening**: Bull Board authentication middleware, CORS origin validation, Docker Compose named volume mounts, healthchecks, and OCI Always Free deployment preparation.
 
 ---
 
