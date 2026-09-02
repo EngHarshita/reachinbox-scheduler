@@ -150,11 +150,32 @@ Access the application at `http://localhost:5173`.
 - **Idle Policy Notice**: OCI reserves the right to reclaim Always Free compute instances if official CPU, memory, and network idle criteria are met over a 7-day period.
 - **No Cron Architecture**: The system uses BullMQ delayed queues and PostgreSQL state persistence for scheduling and restart recovery. Application or OS cron jobs are not used.
 
-## 🗓️ Development Progression & Milestones
+## 🗓️ Development Progression
 
-- **Phase 1 — Core Foundation**: Express.js TypeScript setup, Prisma PostgreSQL schema design, Redis connection, BullMQ queue integration, and baseline Vite React client layout.
-- **Phase 2 — Integrations & Services**: Google OAuth 2.0, Gmail REST API dispatch engine, Ethereal SMTP Nodemailer transport, Elasticsearch multi-field full-text search, and Slack OAuth with deduplicated rate-limit alerts.
-- **Phase 3 — Production Hardening**: Bull Board authentication middleware, CORS origin validation, Docker Compose named volume mounts, healthchecks, and OCI Always Free deployment preparation.
+*Note: This section summarizes the development progression and major capabilities completed during implementation; it is not a reconstruction of Git commit timestamps.*
+
+### September 1 — Foundation & Core Scheduler
+- Express.js + TypeScript backend foundation
+- Prisma ORM & PostgreSQL database schema migrations
+- Redis connection & BullMQ delayed email queue integration
+- Baseline Vite React client layout & navigation structure
+- Email dispatch API endpoint & persistence data models
+
+### September 2 — Integrations & Services
+- Google OAuth 2.0 user authentication flow
+- Gmail REST API multi-tenant email dispatch engine
+- Ethereal SMTP Nodemailer transport for testing
+- Elasticsearch multi-field full-text search integration
+- Slack OAuth 2.0 & deduplicated rate-limit alerts
+- Compose editor with contentEditable rich text & attachment handling
+
+### September 3 — Hardening & Submission
+- Startup queue scanner for server restart job recovery
+- Atomic row-level database status claiming (`prisma.email.updateMany`)
+- Bull Board monitoring dashboard with production auth protection
+- Shared Redis hourly rate limiting (`HOURLY_EMAIL_LIMIT=100`)
+- Docker Compose production volume persistence & healthchecks
+- Repository audit, security secret scanning, and GitHub submission
 
 ---
 
