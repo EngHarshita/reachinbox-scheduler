@@ -1,193 +1,274 @@
-# 📬 ReachInbox Email Scheduler
+# ReachInbox Email Scheduler
 
-A multi-tenant email scheduling and outreach platform built with **TypeScript**, **Express.js**, **BullMQ**, **Redis**, **PostgreSQL**, **Elasticsearch**, **Google OAuth 2.0**, and **Slack API Integration**.
+## Overview
+
+ReachInbox Email Scheduler is a multi-tenant email scheduling and delivery system designed to handle outbound email dispatches, queue management, and delivery tracking. It provides an Express.js TypeScript REST backend, a Vite React frontend, and background worker dispatches powered by BullMQ and Redis.
+
+The platform supports dual email delivery mechanisms: multi-tenant dispatches using authorized user credentials via the Google Gmail REST API, and test dispatches using Ethereal SMTP. It includes per-user rate limiting, atomic concurrency control in PostgreSQL, full-text message indexing in Elasticsearch, real-time Slack alert notifications, and a Bull Board queue monitoring dashboard.
 
 ---
 
-## 🏗️ System Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
-    Client[React + Vite Frontend]
-    API[Express.js REST API]
-    DB[(PostgreSQL Database)]
-    Redis[(Redis 7)]
-    Queue[BullMQ Queue]
-    Worker[Email Worker Pool]
+    FE[React Frontend]
+    API[Express API]
+    DB[(PostgreSQL)]
+    Q[BullMQ Queue]
+    R[(Redis)]
+    W[Email Worker]
     ES[(Elasticsearch)]
-    Gmail[Gmail REST API / Ethereal SMTP]
-    Slack[Slack Web API]
+    MAIL[Ethereal SMTP / Gmail API]
+    SL[Slack API]
 
-    Client -->|REST API v1| API
-    API -->|Source of Truth| DB
-    API -->|Enqueue Jobs| Queue
-    Queue -->|State & Counters| Redis
-    Worker -->|Process Jobs| Queue
-    Worker -->|Atomic DB Claim| DB
-    Worker -->|Dispatch Email| Gmail
-    Worker -->|Index Documents| ES
-    Worker -->|Rate Limit Alerts| Slack
-    API -->|Full-Text Search| ES
+    FE --> API
+    API --> DB
+    API --> Q
+    Q --> R
+    W --> Q
+    W --> DB
+    W --> MAIL
+    API --> ES
+    W --> ES
+    W --> SL
 ```
 
 ---
 
-## ✨ Key Technical Features
+## Features
 
-1. **Multi-Tenant Google OAuth & Ethereal SMTP Dual Dispatch**:
-   - Logged-in users dispatch emails using their authorized Google account via the Gmail REST API (`POST https://gmail.googleapis.com/gmail/v1/users/me/messages/send`).
-   - Support for testing dispatches via Ethereal SMTP (`EMAIL_PROVIDER=ethereal`) with custom `From` headers and 0 ghost attachments.
-
-2. **Atomic Idempotency & Concurrency Control**:
-   - Employs PostgreSQL row-level atomic status claiming (`prisma.email.updateMany`) before job execution.
-   - Prevents duplicate sends across high-concurrency worker pools (`WORKER_CONCURRENCY=5`).
-
-3. **Event-Driven Scheduling & Rate Limiting (No Cron)**:
-   - Uses BullMQ delayed jobs backed by Redis to orchestrate precise future dispatch times without application or OS cron jobs.
-   - Enforces per-user hourly limits (`HOURLY_EMAIL_LIMIT=100`). Excess emails are deferred to the next hourly window via `job.moveToDelayed()`.
-
-4. **Slack OAuth Integration & Alert Deduplication**:
-   - Real Slack OAuth 2.0 flow for channel integration.
-   - Triggers real-time Slack notifications when hourly limits are reached, deduplicated to 1 alert per user per hour using Redis TTL keys.
-
-5. **Elasticsearch Multi-Field Full-Text Search**:
-   - Indexes email records into Elasticsearch (`emails` index) with user-scoped isolation.
-   - Automatically falls back to PostgreSQL search if the Elasticsearch node is offline.
-
-6. **Queue Monitoring Dashboard**:
-   - Bull Board dashboard available at `/admin/queues` for real-time visualization of queue metrics.
-   - In production mode (`NODE_ENV=production`), access requires `BULL_BOARD_AUTH_KEY` header verification.
+- **Multi-Tenant Dual Email Dispatch**: Sends emails via Gmail REST API for authenticated Google accounts or Ethereal SMTP for testing environments.
+- **Event-Driven Queue Scheduling**: Schedules future email dispatches using BullMQ delayed queues backed by Redis without application or OS cron jobs.
+- **Atomic Concurrency Control**: Uses PostgreSQL row-level status claiming (`updateMany`) to prevent duplicate dispatches across concurrent worker threads.
+- **Per-User Rate Limiting**: Enforces hourly email dispatches quotas (default 100 emails/hr) per user using Redis atomic counters.
+- **Slack Alert Integration**: Integrates with Slack OAuth 2.0 to send real-time alerts when hourly rate limits are reached, deduplicated to 1 alert per hour window.
+- **Full-Text Message Search**: Indexes sent messages into Elasticsearch with user-scoped isolation and automatic PostgreSQL fallback.
+- **Queue Monitoring**: Integrates Bull Board dashboard at `/admin/queues` with production key authorization.
+- **Restart Recovery**: Scans PostgreSQL on application startup to re-enqueue any pending or missing delayed jobs into BullMQ.
 
 ---
 
-## 🚀 Local Development Setup
+## Tech Stack
+
+| Component | Technology |
+|---|---|
+| Backend | Node.js, Express.js, TypeScript |
+| Frontend | React 18, Vite, Tailwind CSS |
+| Database | PostgreSQL 16, Prisma ORM |
+| Queue & Cache | BullMQ, Redis 7 |
+| Search | Elasticsearch 8.11 |
+| Email Providers | Gmail REST API, Nodemailer / Ethereal SMTP |
+| Integrations | Google OAuth 2.0, Slack OAuth 2.0 |
+| Monitoring | Bull Board |
+
+---
+
+## Project Structure
+
+```
+.
+├── docker-compose.yml         # Container definitions (Postgres, Redis, Elasticsearch)
+├── Dockerfile                 # Multi-stage production container build
+├── package.json               # Backend dependencies and scripts
+├── prisma/
+│   ├── schema.prisma          # Data schema definition
+│   └── migrations/            # Version-controlled SQL migrations
+├── src/
+│   ├── app.ts                 # Express application configuration
+│   ├── server.ts              # API server entrypoint
+│   ├── config/                # Environment, database, queue, and logger setup
+│   ├── controllers/           # API request handlers
+│   ├── routes/                # Express route definitions
+│   ├── services/              # Business logic (Gmail, Ethereal, Search, Rate Limiter)
+│   └── workers/               # BullMQ background email worker handlers
+└── frontend/
+    ├── package.json           # Frontend dependencies and scripts
+    ├── vite.config.ts         # Vite build configuration
+    └── src/                   # React components, pages, and API hooks
+```
+
+---
+
+## Scheduling and Queue Design
+
+Email dispatches are scheduled by calculating the delayed timestamp difference (`scheduledAt - now`) and enqueuing a delayed job into BullMQ. Redis acts as the persistent backed store for queue state.
+
+Worker processes run with configurable concurrency (`WORKER_CONCURRENCY=5`). When a job becomes active:
+1. The worker claims the email record in PostgreSQL using an atomic `updateMany` call (`QUEUED` → `PROCESSING`). If 0 rows are updated, the job is aborted to prevent duplicate dispatches.
+2. The worker checks the user's hourly quota counter in Redis. If the limit is exceeded, the job is deferred to the next hourly window using `job.moveToDelayed()`.
+3. If valid, the email is dispatched through the designated provider and marked `SENT` in PostgreSQL.
+
+---
+
+## Email Delivery
+
+The application supports two delivery strategies configured via `EMAIL_PROVIDER`:
+- **Gmail REST API**: Uses multi-tenant OAuth access tokens stored per user to send RFC 2822 MIME-formatted emails directly through Google's API (`POST https://gmail.googleapis.com/gmail/v1/users/me/messages/send`).
+- **Ethereal SMTP**: Uses Nodemailer to deliver test emails to Ethereal SMTP with multipart/alternative formatting to avoid ghost attachments.
+
+---
+
+## Search
+
+Full-text search is implemented using Elasticsearch. When an email is dispatched, its details (recipient, subject, body, status, timestamps) are indexed into the `emails` index.
+
+Search queries execute against Elasticsearch with user filtering (`userId`). If Elasticsearch is unreachable or returns an error, the service falls back to PostgreSQL ILIKE queries over subject and body fields.
+
+---
+
+## Authentication
+
+User authentication relies on Google OAuth 2.0.
+1. The client initiates authentication at `/api/v1/auth/google`.
+2. Upon user consent, the backend receives the authorization code, exchanges it for access and refresh tokens, fetches user profile information, and stores tokens in PostgreSQL.
+3. The API issues a JWT session token to the client for subsequent authenticated API requests.
+
+---
+
+## Slack Integration
+
+Users can link their Slack workspace using Slack OAuth 2.0. Access tokens are stored per user in PostgreSQL.
+
+When a user hits their hourly email rate limit, the background worker sends a formatted notification message to the user's configured Slack channel. To avoid notification spam, alert dispatches are deduplicated to 1 alert per user per hour using a Redis TTL key (`slack:alert:<userId>:<YYYYMMDDHH>`).
+
+---
+
+## Local Setup
 
 ### Prerequisites
 - Node.js (v18+)
 - Docker & Docker Compose
-- PostgreSQL 16
-- Redis 7
-- Elasticsearch 8.11
 
-### 1. Launch Infrastructure Containers
+### 1. Start Infrastructure Services
 ```bash
 docker compose up -d
 ```
 
-### 2. Install & Start Backend
+### 2. Setup and Run Backend
 ```bash
+# Install dependencies
 npm install
+
+# Run database migrations
 npx prisma migrate deploy
+
+# Start development server
 npm run dev
 ```
 
-### 3. Install & Start Frontend
+### 3. Setup and Run Frontend
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Access the application at `http://localhost:5173`.
+The frontend application will be available at `http://localhost:5173`.
 
 ---
 
-## 🔑 Environment Configuration (`.env`)
+## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `PORT` | Yes | API server port (default `4000`) |
-| `NODE_ENV` | Yes | Environment mode (`development` / `production`) |
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `REDIS_HOST` | Yes | Redis host (default `localhost` / `redis`) |
-| `REDIS_PORT` | Yes | Redis port (default `6379`) |
-| `JWT_SECRET` | Yes | Secret key for signing JWT tokens |
-| `GOOGLE_CLIENT_ID` | Yes | Google OAuth 2.0 Client ID |
-| `GOOGLE_CLIENT_SECRET` | Yes | Google OAuth 2.0 Client Secret |
-| `GOOGLE_REDIRECT_URI` | Yes | Google OAuth callback URL |
-| `FRONTEND_URL` | Yes | Allowed frontend origin for CORS |
-| `EMAIL_PROVIDER` | Yes | Provider strategy (`gmail`, `ethereal`, `smtp`) |
-| `ETHEREAL_HOST` | No | Ethereal SMTP host (`smtp.ethereal.email`) |
-| `ETHEREAL_PORT` | No | Ethereal SMTP port (`587`) |
-| `SMTP_HOST` | No | SMTP host for custom transport |
-| `SMTP_PORT` | No | SMTP port for custom transport |
-| `SMTP_USER` | No | SMTP authentication username |
-| `SMTP_PASS` | No | SMTP authentication password |
-| `EMAIL_FROM` | Yes | Default sender display header |
-| `ELASTICSEARCH_NODE` | Yes | Elasticsearch endpoint (`http://localhost:9200`) |
-| `WORKER_CONCURRENCY` | Yes | Concurrency per worker instance (default `5`) |
-| `WORKER_COUNT` | Yes | Number of worker processes (default `2`) |
-| `HOURLY_EMAIL_LIMIT` | Yes | Hourly dispatch quota per user (default `100`) |
-| `MIN_EMAIL_DELAY_MS` | Yes | Minimum delay between dispatches (default `1000`) |
-| `SLACK_CLIENT_ID` | No | Slack OAuth Client ID |
-| `SLACK_CLIENT_SECRET` | No | Slack OAuth Client Secret |
-| `SLACK_REDIRECT_URI` | No | Slack OAuth callback URL |
-| `BULL_BOARD_AUTH_KEY` | Production | Admin authorization key for `/admin/queues` |
+Copy `.env.example` to `.env` and fill in the configuration values:
+
+```env
+PORT=4000
+NODE_ENV=development
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/reachinbox?schema=public
+REDIS_HOST=localhost
+REDIS_PORT=6379
+JWT_SECRET=your_jwt_secret_key
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:4000/api/v1/auth/google/callback
+FRONTEND_URL=http://localhost:5173
+EMAIL_PROVIDER=gmail
+ELASTICSEARCH_NODE=http://localhost:9200
+WORKER_CONCURRENCY=5
+WORKER_COUNT=2
+HOURLY_EMAIL_LIMIT=100
+MIN_EMAIL_DELAY_MS=1000
+BULL_BOARD_AUTH_KEY=your_admin_secret_key
+```
 
 ---
 
-## 🎬 5-Minute Evaluator Demo Guide
+## Database Migrations
 
-1. **Google Login**: Open `http://localhost:5173` and click **Google Login**. User profile information will populate.
-2. **Compose Email**: Go to **Scheduled Emails** → **Compose Email**. Input recipients (or upload CSV), set subject/body, choose start time, and schedule dispatch.
-3. **Queue Monitoring**: Open `http://localhost:4000/admin/queues` to inspect live queue counters.
-4. **Real-Time Sync**: Observe state updates (`QUEUED` → `PROCESSING` → `SENT`) in the dashboard.
-5. **Sent Verification**: Verify dispatched emails in the user's Gmail `Sent Mail` folder or Ethereal output.
-6. **Elasticsearch Search**: Perform a full-text query using the top search bar.
-7. **Slack Alerting**: Connect Slack in settings, trigger the rate limit, and verify the formatted alert in Slack.
+### Local Development
+During active local development schema alterations:
+```bash
+npx prisma db push
+```
 
----
-
-## 📌 OAuth Setup Notes
-
-- **Google OAuth Testing Mode**: While the Google Cloud app is in *Testing* publishing status, authorized accounts must be added under **Test Users** in the Google Cloud Console.
-- **Slack OAuth**: In production, update the Slack App Redirect URI to match your public HTTPS callback domain (`https://<your-domain>/api/v1/slack/callback`).
+### Production Deployment
+For production deployments, apply versioned database migrations:
+```bash
+docker compose exec app npx prisma migrate deploy
+```
 
 ---
 
-## 🌐 Production Deployment & Free-Tier Notes
+## Docker
 
-- **Oracle Cloud Infrastructure (OCI) Always Free**: Designed to run within OCI Always Free Ampere A1 limits (up to 2 OCPUs, 12 GB RAM total per tenancy, and 200 GB Block Storage) with $0 expected infrastructure cost while within quotas.
-- **Idle Policy Notice**: OCI reserves the right to reclaim Always Free compute instances if official CPU, memory, and network idle criteria are met over a 7-day period.
-- **No Cron Architecture**: The system uses BullMQ delayed queues and PostgreSQL state persistence for scheduling and restart recovery. Application or OS cron jobs are not used.
+The repository includes a `docker-compose.yml` for local service dependencies (PostgreSQL 16, Redis 7, Elasticsearch 8.11) and a multi-stage `Dockerfile` for backend production builds.
 
-## 🗓️ Development Progression
+To build and launch the full containerized stack:
+```bash
+docker compose up -d --build
+```
+
+---
+
+## Development Timeline
 
 *Note: This section summarizes the development progression and major capabilities completed during implementation; it is not a reconstruction of Git commit timestamps.*
 
 ### September 1 — Foundation & Core Scheduler
-- Express.js + TypeScript backend foundation
-- Prisma ORM & PostgreSQL database schema migrations
-- Redis connection & BullMQ delayed email queue integration
-- Baseline Vite React client layout & navigation structure
-- Email dispatch API endpoint & persistence data models
+- Express.js + TypeScript backend setup and REST API routes
+- PostgreSQL schema modeling with Prisma ORM and migrations
+- Redis connection and BullMQ queue architecture
+- Baseline Vite React client layout and scheduling form
+- Email data models and status persistence
 
 ### September 2 — Integrations & Services
 - Google OAuth 2.0 user authentication flow
 - Gmail REST API multi-tenant email dispatch engine
-- Ethereal SMTP Nodemailer transport for testing
-- Elasticsearch multi-field full-text search integration
-- Slack OAuth 2.0 & deduplicated rate-limit alerts
-- Compose editor with contentEditable rich text & attachment handling
+- Ethereal SMTP Nodemailer transport integration
+- Elasticsearch multi-field full-text search and PostgreSQL fallback
+- Slack OAuth 2.0 and deduplicated rate-limit alerts
+- Rich text compose editor with CSV recipient import
 
 ### September 3 — Hardening & Submission
-- Startup queue scanner for server restart job recovery
+- Startup scanner for queue recovery on server restart
 - Atomic row-level database status claiming (`prisma.email.updateMany`)
-- Bull Board monitoring dashboard with production auth protection
+- Bull Board monitoring dashboard with production key authorization
 - Shared Redis hourly rate limiting (`HOURLY_EMAIL_LIMIT=100`)
-- Docker Compose production volume persistence & healthchecks
-- Repository audit, security secret scanning, and GitHub submission
+- Docker Compose production volume persistence and healthchecks
+- Security audit, repository cleanup, and GitHub submission
 
 ---
 
-## 📋 Assignment Requirements Compliance
+## Demo Flow
 
-| Requirement | Implementation Status |
-|-------------|-----------------------|
-| **TypeScript / Node / Express** | Fully implemented in backend & frontend |
-| **BullMQ & Redis Scheduler** | Fully implemented; 0 cron jobs used |
-| **PostgreSQL Schema & Persistence** | Fully implemented via Prisma ORM |
-| **Ethereal SMTP & Gmail API** | Dual provider support with clean MIME output |
-| **Elasticsearch Integration** | User-scoped search with PostgreSQL fallback |
-| **Bull Board Dashboard** | Mounted at `/admin/queues` with production auth protection |
-| **Idempotency & Concurrency** | Atomic row-level database claiming enforced |
-| **Slack Integration** | Real Slack OAuth & deduplicated rate-limit alerts |
+1. **Authentication**: Open `http://localhost:5173` and click **Google Login**.
+2. **Schedule Email**: Navigate to **Compose Email**, add recipient, subject, and body, set schedule time, and click **Schedule Email**.
+3. **Queue Dashboard**: Open `http://localhost:4000/admin/queues` to observe delayed and active queue counts.
+4. **Delivery Verification**: Verify email state transitions from `QUEUED` to `PROCESSING` to `SENT` in the UI and confirm delivery in Gmail Sent Mail or Ethereal output.
+5. **Search**: Enter a keyword in the search bar to test Elasticsearch full-text search.
+
+---
+
+## Assumptions and Trade-offs
+
+- **Google OAuth Testing Mode**: Google Cloud App is in testing status; test accounts must be added under Test Users in the Google Cloud Console.
+- **Oracle Cloud Infrastructure (OCI) Always Free**: Configured for deployment within OCI Always Free Ampere A1 limits (up to 2 OCPUs, 12 GB RAM) with expected $0 infrastructure cost while remaining within quotas.
+
+---
+
+## Security Notes
+
+- Zero hardcoded credentials or private keys in the repository.
+- Sensitive environment variables stored in server-side `.env` files.
+- Bull Board monitoring endpoint protected with `BULL_BOARD_AUTH_KEY` in production mode.
+- Internal database and cache ports bound locally or isolated within Docker networks.
