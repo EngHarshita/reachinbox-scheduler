@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EmailStatus {
+  PENDING
+  QUEUED
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id                 String               @id @default(uuid())
+  email              String               @unique
+  googleId           String?              @unique @map("google_id")
+  passwordHash       String?              @map("password_hash")
+  fullName           String?              @map("full_name")
+  googleAccessToken  String?              @map("google_access_token")
+  googleRefreshToken String?              @map("google_refresh_token")
+  googleTokenExpiry  DateTime?            @map("google_token_expiry")
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+
+  emails             Email[]
+  slackConnections   SlackConnection[]
+  rateLimitCounters  RateLimitCounter[]
+
+  @@map("users")
+}
+
+model Email {
+  id             String      @id @default(uuid())
+  userId         String      @map("user_id")
+  recipientEmail String      @map("recipient_email")
+  subject        String
+  bodyHtml       String      @map("body_html") @db.Text
+  bodyText       String?     @map("body_text") @db.Text
+  scheduledAt    DateTime    @map("scheduled_at")
+  sentAt         DateTime?   @map("sent_at")
+  status         EmailStatus @default(PENDING)
+  retryCount     Int         @default(0) @map("retry_count")
+  smtpResponse   String?     @map("smtp_response") @db.Text
+  errorMessage   String?     @map("error_message") @db.Text
+  bullMqJobId    String?     @map("bullmq_job_id")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("emails")
+}
+
+model SlackConnection {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  teamId       String   @map("team_id")
+  teamName     String?  @map("team_name")
+  accessToken  String   @map("access_token")
+  webhookUrl   String?  @map("webhook_url")
+  channelId    String?  @map("channel_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@map("slack_connections")
+}
+
+model RateLimitCounter {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  windowStart DateTime @map("window_start")
+  count       Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, windowStart])
+  @@map("rate_limit_counters")
+}
