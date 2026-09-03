@@ -10,12 +10,20 @@ export const AuthCallbackPage: React.FC = () => {
   useEffect(() => {
     const token = searchParams.get('token');
     const userStr = searchParams.get('user');
+    const hasRefreshToken = searchParams.get('hasRefreshToken');
 
     if (token && userStr) {
       try {
         const user = JSON.parse(userStr);
         loginWithToken(token, user);
-        navigate('/dashboard', { replace: true });
+
+        if (hasRefreshToken === 'false' || hasRefreshToken === 'null' || !hasRefreshToken) {
+          // First-time user or missing Gmail refresh token: initiate Gmail OAuth flow immediately after login
+          window.location.href = '/api/v1/auth/gmail/connect';
+        } else {
+          // User already has a valid Gmail refresh token: proceed straight to dashboard
+          navigate('/dashboard', { replace: true });
+        }
       } catch (err) {
         console.error('Failed to parse OAuth callback parameters:', err);
         navigate('/login', { replace: true });

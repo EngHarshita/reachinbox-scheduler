@@ -9,6 +9,7 @@ export interface GoogleAuthResult {
     email: string;
     fullName: string | null;
   };
+  hasRefreshToken: boolean;
 }
 
 export const processGoogleCallback = async (code: string): Promise<GoogleAuthResult> => {
@@ -129,6 +130,8 @@ export const processGoogleCallback = async (code: string): Promise<GoogleAuthRes
     email: user.email,
   });
 
+  const hasRefreshToken = Boolean(user.googleRefreshToken);
+
   return {
     token,
     user: {
@@ -136,5 +139,6 @@ export const processGoogleCallback = async (code: string): Promise<GoogleAuthRes
       email: user.email,
       fullName: user.fullName,
     },
+    hasRefreshToken,
   };
 };

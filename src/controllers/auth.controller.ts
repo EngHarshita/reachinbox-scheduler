@@ -51,7 +51,11 @@ export const handleGoogleCallback = async (
     if (oauthError) {
       console.warn(`[Google OAuth Callback Warning]: Received OAuth error: '${oauthError}'`);
       if (state === 'gmail_connect') {
-        res.redirect(`${frontendUrl}/settings?error=${encodeURIComponent(oauthError)}`);
+        res.redirect(
+          `${frontendUrl}/dashboard?error=${encodeURIComponent(
+            'Gmail authorization was cancelled. You can connect Gmail anytime in Settings.'
+          )}`
+        );
         return;
       }
       res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(oauthError)}`);
@@ -64,17 +68,17 @@ export const handleGoogleCallback = async (
       return;
     }
 
-    const { token, user } = await processGoogleCallback(code);
+    const { token, user, hasRefreshToken } = await processGoogleCallback(code);
 
     if (state === 'gmail_connect') {
-      res.redirect(`${frontendUrl}/settings?gmail=connected`);
+      res.redirect(`${frontendUrl}/dashboard?gmail=connected`);
       return;
     }
 
-    // Redirect to Frontend with auth token in URL query parameter
+    // Redirect to Frontend with auth token and refreshToken status in URL query parameter
     const redirectUrl = `${frontendUrl}/auth/success?token=${encodeURIComponent(
       token
-    )}&user=${encodeURIComponent(JSON.stringify(user))}`;
+    )}&user=${encodeURIComponent(JSON.stringify(user))}&hasRefreshToken=${hasRefreshToken}`;
 
     res.redirect(redirectUrl);
   } catch (error) {

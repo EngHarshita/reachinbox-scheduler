@@ -1,11 +1,22 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Mail, Send, Clock, AlertCircle, ArrowUpRight } from 'lucide-react';
+import { Mail, Send, Clock, AlertCircle, ArrowUpRight, CheckCircle2, X } from 'lucide-react';
 import { api } from '../services/api';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
 export const DashboardOverviewPage: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [metrics, setMetrics] = useState({ scheduled: 0, sent: 0, pending: 0 });
   const [loading, setLoading] = useState(true);
+
+  const gmailConnected = searchParams.get('gmail') === 'connected';
+  const errorMessage = searchParams.get('error');
+
+  const dismissBanner = () => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('gmail');
+    newParams.delete('error');
+    setSearchParams(newParams, { replace: true });
+  };
 
   const fetchMetrics = useCallback(async (isInitial = false) => {
     try {
@@ -36,6 +47,30 @@ export const DashboardOverviewPage: React.FC = () => {
 
   return (
     <div className="flex-1 p-6 sm:p-8 overflow-y-auto bg-white text-slate-900 space-y-8">
+      {gmailConnected && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-medium flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <span>Gmail account connected successfully! You can now compose and send emails.</span>
+          </div>
+          <button onClick={dismissBanner} className="text-emerald-600 hover:text-emerald-800 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {errorMessage && (
+        <div className="p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-medium flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button onClick={dismissBanner} className="text-amber-600 hover:text-amber-800 cursor-pointer">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
         <div>
