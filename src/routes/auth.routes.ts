@@ -5,6 +5,7 @@ import {
   handleGmailConnectRedirect,
   handleGetGmailConnectUrl,
   handleGetGmailStatus,
+  handleDisconnectGmail,
   handleGoogleCallback,
   handleDemoLogin,
   handleGetMe,
@@ -20,6 +21,7 @@ router.get('/google/callback', handleGoogleCallback);
 router.get('/gmail/connect', handleGmailConnectRedirect);
 router.get('/gmail/url', handleGetGmailConnectUrl);
 router.get('/gmail/status', authenticateJwt, handleGetGmailStatus);
+router.post('/gmail/disconnect', authenticateJwt, handleDisconnectGmail);
 router.post('/demo', handleDemoLogin);
 router.get('/me', authenticateJwt, handleGetMe);
 router.post('/logout', authenticateJwt, handleLogout);
