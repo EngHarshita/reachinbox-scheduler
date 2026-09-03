@@ -99,12 +99,42 @@ export const handleGetGmailStatus = async (
       select: { email: true, googleRefreshToken: true, googleAccessToken: true },
     });
 
-    const isConnected = Boolean(dbUser?.googleRefreshToken || dbUser?.googleAccessToken);
+    const isConnected = Boolean(dbUser?.googleRefreshToken);
     res.status(200).json({
       status: 'success',
       connected: isConnected,
       hasRefreshToken: Boolean(dbUser?.googleRefreshToken),
       email: dbUser?.email || '',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const handleDisconnectGmail = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        googleAccessToken: null,
+        googleRefreshToken: null,
+        googleTokenExpiry: null,
+      },
+    });
+
+    res.status(200).json({
+      status: 'success',
+      message: 'Gmail sender account disconnected successfully',
     });
   } catch (err) {
     next(err);

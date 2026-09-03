@@ -85,17 +85,39 @@ export const processGoogleCallback = async (code: string): Promise<GoogleAuthRes
         },
       });
     } else {
-      // Step 4: Create new application user
-      user = await userDelegate.create({
-        data: {
-          email,
-          googleId,
-          fullName: name,
-          googleAccessToken: accessToken,
-          googleRefreshToken: refreshToken,
-          googleTokenExpiry: expiryDate,
-        },
-      });
+      // Step 4: Create new application user with concurrency protection
+      try {
+        user = await userDelegate.create({
+          data: {
+            email,
+            googleId,
+            fullName: name,
+            googleAccessToken: accessToken,
+            googleRefreshToken: refreshToken,
+            googleTokenExpiry: expiryDate,
+          },
+        });
+      } catch (createErr: any) {
+        // Handle concurrent first-login race condition
+        user = await userDelegate.findFirst({
+          where: { OR: [{ googleId }, { email }] },
+        });
+        if (user) {
+          user = await userDelegate.update({
+            where: { id: user.id },
+            data: {
+              googleId,
+              email,
+              fullName: name,
+              googleAccessToken: accessToken,
+              ...(refreshToken && { googleRefreshToken: refreshToken }),
+              ...(expiryDate && { googleTokenExpiry: expiryDate }),
+            },
+          });
+        } else {
+          throw createErr;
+        }
+      }
     }
   }
 

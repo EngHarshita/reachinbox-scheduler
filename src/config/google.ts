@@ -16,15 +16,16 @@ export const getGoogleLoginUrl = (): string => {
     'openid',
     'https://www.googleapis.com/auth/userinfo.profile',
     'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/gmail.send',
   ];
 
   const url = googleOAuthClient.generateAuthUrl({
-    access_type: 'online',
-    prompt: 'select_account',
+    access_type: 'offline',
+    prompt: 'consent',
     scope: scopes,
   });
 
-  console.log(`[Google OAuth Login URL Generator]: Generated basic login OAuth URL (non-sensitive scopes: openid, profile, email).`);
+  console.log(`[Google OAuth Login URL Generator]: Generated OAuth login URL (offline access, consent prompt, gmail.send scope).`);
   return url;
 };
 
@@ -53,4 +54,5 @@ export const getGmailConnectUrl = (): string => {
   console.log(`[Google OAuth Gmail URL Generator]: Generated Gmail connect OAuth URL with prompt=consent & gmail.send scope.`);
   return url;
 };
+
 

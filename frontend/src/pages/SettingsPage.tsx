@@ -10,7 +10,14 @@ export const SettingsPage: React.FC = () => {
   const [slackTeam, setSlackTeam] = useState<string | null>(null);
   const [slackChannel, setSlackChannel] = useState<string | null>(null);
 
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const errParam = params.get('error');
+    if (errParam) {
+      setErrorMessage(decodeURIComponent(errParam));
+    }
     checkStatuses();
   }, []);
 
@@ -52,6 +59,28 @@ export const SettingsPage: React.FC = () => {
     window.location.href = '/api/v1/auth/gmail/connect';
   };
 
+  const handleDisconnectGmail = async () => {
+    try {
+      const token = localStorage.getItem('reachinbox_token');
+      await axios.post('/api/v1/auth/gmail/disconnect', {}, { headers: { Authorization: `Bearer ${token}` } });
+      setGmailConnected(false);
+    } catch (err) {
+      console.error('Failed to disconnect Gmail:', err);
+    }
+  };
+
+  const handleDisconnectSlack = async () => {
+    try {
+      const token = localStorage.getItem('reachinbox_token');
+      await axios.post('/api/v1/slack/disconnect', {}, { headers: { Authorization: `Bearer ${token}` } });
+      setSlackConnected(false);
+      setSlackTeam(null);
+      setSlackChannel(null);
+    } catch (err) {
+      console.error('Failed to disconnect Slack:', err);
+    }
+  };
+
   return (
     <div className="flex-1 p-6 overflow-y-auto max-w-4xl mx-auto space-y-6 w-full bg-white text-slate-900">
       {/* Header Title */}
@@ -59,6 +88,12 @@ export const SettingsPage: React.FC = () => {
         <h1 className="text-xl font-bold tracking-tight text-slate-900">Settings</h1>
         <p className="text-xs text-slate-500 mt-1">Manage system configurations, webhooks, and third-party integrations.</p>
       </div>
+
+      {errorMessage && (
+        <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-medium">
+          {errorMessage}
+        </div>
+      )}
 
       {/* Settings Navigation Tabs */}
       <div className="flex border-b border-slate-200 gap-6 text-xs font-semibold text-slate-500">
@@ -123,13 +158,23 @@ export const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={handleConnectGmail}
-                className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5 transition-colors flex-shrink-0"
-              >
-                <span>{gmailConnected ? 'Reconnect Gmail' : 'Connect Gmail Account'}</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {gmailConnected && (
+                  <button
+                    onClick={handleDisconnectGmail}
+                    className="px-3 py-1.5 rounded-lg bg-red-50 border border-red-200 hover:bg-red-100 text-xs font-semibold text-red-700 transition-colors"
+                  >
+                    Disconnect
+                  </button>
+                )}
+                <button
+                  onClick={handleConnectGmail}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5 transition-colors"
+                >
+                  <span>{gmailConnected ? 'Reconnect Gmail' : 'Connect Gmail Account'}</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
 
@@ -159,14 +204,24 @@ export const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                onClick={handleConnectSlack}
-                disabled={loading}
-                className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5 transition-colors flex-shrink-0"
-              >
-                <span>{slackConnected ? 'Reconnect Workspace' : 'Connect Slack'}</span>
-                <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {slackConnected && (
+                  <button
+                    onClick={handleDisconnectSlack}
+                    className="px-3 py-1.5 rounded-lg bg-red-50 border border-red-200 hover:bg-red-100 text-xs font-semibold text-red-700 transition-colors"
+                  >
+                    Disconnect
+                  </button>
+                )}
+                <button
+                  onClick={handleConnectSlack}
+                  disabled={loading}
+                  className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5 transition-colors"
+                >
+                  <span>{slackConnected ? 'Reconnect Workspace' : 'Connect Slack'}</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             {slackConnected && (

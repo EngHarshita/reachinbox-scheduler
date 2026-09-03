@@ -18,7 +18,7 @@ export const getUserGmailStatus = async (userId: string): Promise<UserGmailAccou
     return { isConnected: false, email: '', hasRefreshToken: false };
   }
 
-  const isConnected = Boolean(user.googleRefreshToken || user.googleAccessToken);
+  const isConnected = Boolean(user.googleRefreshToken);
   return {
     isConnected,
     email: user.email,
@@ -54,17 +54,17 @@ export const sendGmailApiService = async (
     throw new Error(`USER_NOT_FOUND: User ID '${userId}' does not exist in database.`);
   }
 
-  const hasOAuthTokens = Boolean(user.googleRefreshToken || user.googleAccessToken);
+  const hasRefreshToken = Boolean(user.googleRefreshToken);
 
   // Strict Tenant Multi-User Sender Isolation
-  if (!hasOAuthTokens) {
+  if (!hasRefreshToken) {
     const isSystemAdmin = (user.email || '').toLowerCase() === (env.SMTP_USER || '').toLowerCase();
-    if (isSystemAdmin) {
+    if (isSystemAdmin && env.SMTP_USER && env.SMTP_PASS) {
       console.log(`[System Admin Dispatch]: Account '${user.email}' dispatching via System SMTP.`);
       return sendMailService(options);
     }
 
-    const notConnectedErr = `GMAIL_NOT_CONNECTED: Gmail account is not connected for user '${user.email}'. Please log in via Google to grant email sending permissions.`;
+    const notConnectedErr = `GMAIL_NOT_CONNECTED: Gmail account is not connected for user '${user.email}'. Please log in via Google or connect Gmail in Settings to grant email sending permissions.`;
     console.error(`[Multi-User Sender Isolation Error]: ❌ ${notConnectedErr}`);
     throw new Error(notConnectedErr);
   }
@@ -80,7 +80,7 @@ export const sendGmailApiService = async (
   // Helper function to perform access token refresh for user
   const refreshUserAccessToken = async (): Promise<string> => {
     if (!user.googleRefreshToken) {
-      throw new Error(`OAUTH_REFRESH_TOKEN_MISSING: Refresh token missing for '${user.email}'. Please log out and reconnect Google Account in ReachInbox.`);
+      throw new Error(`OAUTH_REFRESH_TOKEN_MISSING: Refresh token missing for '${user.email}'. Please reconnect Gmail in Settings.`);
     }
 
     console.log(`[OAuth Token Refresh]: Exchanging refresh token for user '${user.email}'...`);
@@ -88,23 +88,31 @@ export const sendGmailApiService = async (
       refresh_token: user.googleRefreshToken,
     });
 
-    const { credentials } = await userOAuthClient.refreshAccessToken();
-    const newAccessToken = credentials.access_token;
-    if (!newAccessToken) {
-      throw new Error(`OAUTH_REFRESH_EMPTY: Google did not return a valid access token for '${user.email}'.`);
+    try {
+      const { credentials } = await userOAuthClient.refreshAccessToken();
+      const newAccessToken = credentials.access_token;
+      if (!newAccessToken) {
+        throw new Error(`OAUTH_REFRESH_EMPTY: Google did not return a valid access token for '${user.email}'.`);
+      }
+
+      const newExpiry = credentials.expiry_date ? new Date(credentials.expiry_date) : null;
+      await userDelegate.update({
+        where: { id: user.id },
+        data: {
+          googleAccessToken: newAccessToken,
+          ...(newExpiry && { googleTokenExpiry: newExpiry }),
+        },
+      });
+
+      console.log(`[OAuth Token Refresh]: Successfully updated access token in database for '${user.email}'.`);
+      return newAccessToken;
+    } catch (refreshErr: any) {
+      const errMsg = refreshErr instanceof Error ? refreshErr.message : String(refreshErr);
+      if (errMsg.includes('invalid_grant') || (refreshErr as any)?.code === '400') {
+        throw new Error(`OAUTH_TOKEN_REVOKED: Google authorization has expired or been revoked for user '${user.email}'. Please reconnect Gmail in Settings.`);
+      }
+      throw refreshErr;
     }
-
-    const newExpiry = credentials.expiry_date ? new Date(credentials.expiry_date) : null;
-    await userDelegate.update({
-      where: { id: user.id },
-      data: {
-        googleAccessToken: newAccessToken,
-        ...(newExpiry && { googleTokenExpiry: newExpiry }),
-      },
-    });
-
-    console.log(`[OAuth Token Refresh]: Successfully updated access token in database for '${user.email}'.`);
-    return newAccessToken;
   };
 
   // Attempt refresh if access token is missing or expired
@@ -172,9 +180,9 @@ export const sendGmailApiService = async (
     body: JSON.stringify({ raw: encodedMessage }),
   });
 
-  // Handle 401 Unauthorized by attempting a token refresh retry ONCE
-  if (response.status === 401 && user.googleRefreshToken) {
-    console.warn(`[Gmail API 401]: Access token rejected for '${user.email}'. Attempting token refresh retry...`);
+  // Handle 401 Unauthorized or 403 Forbidden by attempting a token refresh retry ONCE
+  if ((response.status === 401 || response.status === 403) && user.googleRefreshToken) {
+    console.warn(`[Gmail API ${response.status}]: Access token rejected or insufficient permissions for '${user.email}'. Attempting token refresh retry...`);
     try {
       accessToken = await refreshUserAccessToken();
       response = await fetch(GMAIL_SEND_URL, {
@@ -186,7 +194,8 @@ export const sendGmailApiService = async (
         body: JSON.stringify({ raw: encodedMessage }),
       });
     } catch (retryErr: any) {
-      console.error(`[Gmail API 401 Retry Failed]: ${retryErr.message}`);
+      console.error(`[Gmail API Refresh Retry Failed]: ${retryErr.message}`);
+      throw retryErr;
     }
   }
 
