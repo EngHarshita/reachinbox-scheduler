@@ -6,7 +6,7 @@
   "rewrites": [
     {
       "source": "/api/v1/:path*",
-      "destination": "https://reachinbox-api.onrender.com/api/v1/:path*"
+      "destination": "https://reachinbox-api-bb4y.onrender.com/api/v1/:path*"
     },
     {
       "source": "/(.*)",
