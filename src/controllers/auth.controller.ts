@@ -88,7 +88,7 @@ export const handleGetGmailStatus = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const userId = req.user?.userId;
+    const userId = req.user?.id;
     if (!userId) {
       res.status(401).json({ status: 'error', message: 'Unauthorized' });
       return;
