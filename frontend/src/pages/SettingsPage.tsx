@@ -51,8 +51,19 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleConnectSlack = () => {
-    window.location.href = '/api/v1/slack/connect';
+  const handleConnectSlack = async () => {
+    try {
+      const token = localStorage.getItem('reachinbox_token');
+      const res = await axios.get('/api/v1/slack/auth-url', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const url = res.data?.data?.url || res.data?.url;
+      if (url) {
+        window.location.href = url;
+      }
+    } catch (err) {
+      console.error('Failed to get Slack Auth URL:', err);
+    }
   };
 
   const handleConnectGmail = () => {
