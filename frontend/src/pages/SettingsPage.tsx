@@ -30,10 +30,13 @@ export const SettingsPage: React.FC = () => {
       // Check Slack Status
       try {
         const slackRes = await axios.get('/api/v1/slack/status', { headers });
-        if (slackRes.data?.connected) {
+        const slackData = slackRes.data?.data || slackRes.data;
+        if (slackData?.connected) {
           setSlackConnected(true);
-          setSlackTeam(slackRes.data.teamName || 'Workspace');
-          setSlackChannel(slackRes.data.channelName || '#alerts');
+          setSlackTeam(slackData.teamName || 'Workspace');
+          setSlackChannel(slackData.channelName || '#alerts');
+        } else {
+          setSlackConnected(false);
         }
       } catch {
         setSlackConnected(false);
@@ -42,7 +45,7 @@ export const SettingsPage: React.FC = () => {
       // Check Gmail Status
       try {
         const gmailRes = await axios.get('/api/v1/auth/gmail/status', { headers });
-        setGmailConnected(Boolean(gmailRes.data?.connected));
+        setGmailConnected(Boolean(gmailRes.data?.data?.connected || gmailRes.data?.connected));
       } catch {
         setGmailConnected(false);
       }
