@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { getGoogleAuthUrl } from '../config/google';
+import { getGoogleLoginUrl, getGmailConnectUrl } from '../config/google';
 import { processGoogleCallback } from '../services/auth.service';
 import { signToken } from '../utils/jwt.util';
 import { AuthenticatedRequest } from '../middlewares/auth.middleware';
@@ -10,7 +10,7 @@ export const handleGoogleRedirect = (
   _req: Request,
   res: Response
 ): void => {
-  const url = getGoogleAuthUrl();
+  const url = getGoogleLoginUrl();
   res.redirect(url);
 };
 
@@ -18,7 +18,23 @@ export const handleGetGoogleAuthUrl = (
   _req: Request,
   res: Response
 ): void => {
-  const url = getGoogleAuthUrl();
+  const url = getGoogleLoginUrl();
+  res.status(200).json({ status: 'success', url });
+};
+
+export const handleGmailConnectRedirect = (
+  _req: Request,
+  res: Response
+): void => {
+  const url = getGmailConnectUrl();
+  res.redirect(url);
+};
+
+export const handleGetGmailConnectUrl = (
+  _req: Request,
+  res: Response
+): void => {
+  const url = getGmailConnectUrl();
   res.status(200).json({ status: 'success', url });
 };
 
@@ -28,6 +44,20 @@ export const handleGoogleCallback = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const frontendUrl = (env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
+    const oauthError = req.query.error as string;
+    const state = req.query.state as string;
+
+    if (oauthError) {
+      console.warn(`[Google OAuth Callback Warning]: Received OAuth error: '${oauthError}'`);
+      if (state === 'gmail_connect') {
+        res.redirect(`${frontendUrl}/settings?error=${encodeURIComponent(oauthError)}`);
+        return;
+      }
+      res.redirect(`${frontendUrl}/login?error=${encodeURIComponent(oauthError)}`);
+      return;
+    }
+
     const code = req.query.code as string;
     if (!code) {
       res.status(400).json({ status: 'error', message: 'Missing OAuth code query parameter' });
@@ -36,8 +66,12 @@ export const handleGoogleCallback = async (
 
     const { token, user } = await processGoogleCallback(code);
 
+    if (state === 'gmail_connect') {
+      res.redirect(`${frontendUrl}/settings?gmail=connected`);
+      return;
+    }
+
     // Redirect to Frontend with auth token in URL query parameter
-    const frontendUrl = (env.FRONTEND_URL || 'http://localhost:5173').replace(/\/$/, '');
     const redirectUrl = `${frontendUrl}/auth/success?token=${encodeURIComponent(
       token
     )}&user=${encodeURIComponent(JSON.stringify(user))}`;
@@ -45,6 +79,35 @@ export const handleGoogleCallback = async (
     res.redirect(redirectUrl);
   } catch (error) {
     next(error);
+  }
+};
+
+export const handleGetGmailStatus = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) {
+      res.status(401).json({ status: 'error', message: 'Unauthorized' });
+      return;
+    }
+
+    const dbUser: any = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, googleRefreshToken: true, googleAccessToken: true },
+    });
+
+    const isConnected = Boolean(dbUser?.googleRefreshToken || dbUser?.googleAccessToken);
+    res.status(200).json({
+      status: 'success',
+      connected: isConnected,
+      hasRefreshToken: Boolean(dbUser?.googleRefreshToken),
+      email: dbUser?.email || '',
+    });
+  } catch (err) {
+    next(err);
   }
 };
 

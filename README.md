@@ -119,10 +119,30 @@ Search queries execute against Elasticsearch with user filtering (`userId`). If 
 
 ## Authentication
 
-User authentication relies on Google OAuth 2.0.
-1. The client initiates authentication at `/api/v1/auth/google`.
-2. Upon user consent, the backend receives the authorization code, exchanges it for access and refresh tokens, fetches user profile information, and stores tokens in PostgreSQL.
-3. The API issues a JWT session token to the client for subsequent authenticated API requests.
+User authentication relies on Google OAuth 2.0 with separated scope tiers:
+1. **Basic Google Sign-In (`/api/v1/auth/google`)**:
+   - Scopes: `openid`, `profile`, `email` (Non-sensitive).
+   - Allows **ANY Google user** to register and log in instantly without Google verification barriers or manual test-user whitelisting.
+   - Auto-provisions new user accounts in PostgreSQL on first login.
+2. **Gmail Sender Authorization (`/api/v1/auth/gmail/connect`)**:
+   - Scope: `https://www.googleapis.com/auth/gmail.send` (Restricted).
+   - Prompted explicitly in **Settings → Connect Gmail** when users choose to send outbound emails via Gmail API.
+
+---
+
+### Production Google OAuth Setup & Verification Requirements
+
+To manage Google OAuth in production environments:
+
+1. **Google Cloud Console OAuth Consent Screen Configuration**:
+   - **Authorized Domains**: Add your production frontend/backend domain (e.g. `onrender.com`, `vercel.app`).
+   - **Authorized Redirect URIs**: Must include exact production callback URL:
+     `https://reachinbox-api-bb4y.onrender.com/api/v1/auth/google/callback`
+
+2. **GCP Publishing Status Tiers**:
+   - **Testing Mode**: Basic profile login works for all users. However, requesting `gmail.send` for email dispatches will block unapproved Google accounts with `Error 403: access_denied` unless their email is added under **OAuth Consent Screen → Test Users** in Google Cloud Console.
+   - **In Production Mode (Unverified)**: Change Publishing Status from *Testing* to *In Production*. Basic login continues to work seamlessly for all users. When users connect Gmail for sending emails, Google shows an "Unverified App" prompt. Users click **Advanced → Go to App (unsafe)** to complete Gmail authorization.
+   - **In Production Mode (Verified)**: Submit the application for Google Verification in the GCP Console by providing a public Privacy Policy link and a short walkthrough video explaining why `gmail.send` scope is required. Once approved, the warning screen is removed.
 
 ---
 

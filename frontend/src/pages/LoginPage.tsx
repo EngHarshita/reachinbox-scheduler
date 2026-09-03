@@ -12,6 +12,9 @@ export const LoginPage: React.FC = () => {
   const [loadingLogin, setLoadingLogin] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
 
+  const queryParams = new URLSearchParams(window.location.search);
+  const oauthError = queryParams.get('error');
+
   if (isAuthenticated) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -84,6 +87,25 @@ export const LoginPage: React.FC = () => {
         >
           Login
         </h1>
+
+        {oauthError && (
+          <div
+            style={{
+              padding: '10px 12px',
+              borderRadius: '8px',
+              backgroundColor: '#FEF2F2',
+              border: '1px solid #FCA5A5',
+              color: '#991B1B',
+              fontSize: '0.75rem',
+              marginBottom: '16px',
+              textAlign: 'center',
+            }}
+          >
+            {oauthError === 'access_denied'
+              ? 'Google authorization was cancelled or denied.'
+              : `Authentication error: ${oauthError}`}
+          </div>
+        )}
 
         {/* Google Login Button */}
         <button
