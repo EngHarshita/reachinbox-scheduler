@@ -35,19 +35,7 @@ export const LoginPage: React.FC = () => {
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      setLoadingLogin(true);
-      const response = await api.post('/auth/demo');
-      if (response.data?.status === 'success' && response.data?.token) {
-        loginWithToken(response.data.token, response.data.user);
-        navigate('/dashboard', { replace: true });
-      }
-    } catch (err) {
-      console.error('Login failed:', err);
-      alert('Login failed. Please ensure backend service is running.');
-    } finally {
-      setLoadingLogin(false);
-    }
+    handleGoogleLogin();
   };
 
   return (
