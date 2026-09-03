@@ -1,5 +1,17 @@
 # ReachInbox Email Scheduler
 
+[![Backend Status](https://img.shields.io/badge/Backend-Live%20on%20Render-emerald?style=flat-square&logo=render)](https://reachinbox-api-bb4y.onrender.com/health)
+[![Frontend Status](https://img.shields.io/badge/Frontend-Live%20on%20Vercel-blue?style=flat-square&logo=vercel)](https://reachinbox-scheduler-sigma.vercel.app)
+
+## Live Production Deployments
+
+| Component | Provider | Live Production URL | Health Check | Status |
+|---|---|---|---|---|
+| **Backend API** | Render | [`https://reachinbox-api-bb4y.onrender.com`](https://reachinbox-api-bb4y.onrender.com) | [`/health` (Healthy)](https://reachinbox-api-bb4y.onrender.com/health) | `Backend: Live on Render` |
+| **Frontend UI** | Vercel | [`https://reachinbox-scheduler-sigma.vercel.app`](https://reachinbox-scheduler-sigma.vercel.app) | [Active](https://reachinbox-scheduler-sigma.vercel.app) | `Frontend: Live on Vercel` |
+
+---
+
 ## Overview
 
 ReachInbox Email Scheduler is a multi-tenant email scheduling and delivery system designed to handle outbound email dispatches, queue management, and delivery tracking. It provides an Express.js TypeScript REST backend, a Vite React frontend, and background worker dispatches powered by BullMQ and Redis.
