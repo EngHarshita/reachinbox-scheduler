@@ -239,59 +239,78 @@ export const Figma3ColumnMailClient: React.FC<Figma3ColumnMailClientProps> = ({
               </div>
             </div>
 
-            {/* Main Reading Container: Max-width 720px */}
-            <div className="flex-1 p-6 sm:p-10 overflow-y-auto">
-              <div className="max-w-[720px] mx-auto space-y-8">
-                {/* Heading Subject (32px) */}
-                <h1 className="text-[32px] font-bold text-slate-900 tracking-tight leading-tight">
-                  {selectedEmail.subject}
-                </h1>
+            {/* Main Reading Container: Max-width 760px */}
+            <div className="flex-1 p-4 sm:p-8 overflow-y-auto">
+              <div className="max-w-[760px] mx-auto space-y-6">
+                {/* Subject Heading */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {renderTimestampBadge(selectedEmail)}
+                    <span className="text-[11px] font-mono text-slate-400">ID: {selectedEmail.id}</span>
+                  </div>
+                  <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight leading-snug">
+                    {selectedEmail.subject || '(No Subject)'}
+                  </h1>
+                </div>
 
-                {/* Sender Metadata Row: Avatar, Name, Email, Timestamp */}
-                <div className="flex items-center justify-between pb-6 border-b border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 font-bold text-sm flex items-center justify-center flex-shrink-0">
-                      {selectedEmail.recipientEmail.charAt(0).toUpperCase()}
+                {/* Sender & Recipient Metadata Box */}
+                <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start sm:items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-600 text-white font-bold text-sm flex items-center justify-center flex-shrink-0 shadow-xs">
+                      {(selectedEmail.recipientEmail || 'U').charAt(0).toUpperCase()}
                     </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 leading-none">
-                        Outbox Scheduler Engine
-                      </h4>
-                      <p className="text-xs text-slate-500 mt-1">
-                        to: <span className="text-slate-800 font-medium">{selectedEmail.recipientEmail}</span>
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-slate-900">ReachInbox Email Scheduler</span>
+                        <span className="text-[11px] text-slate-400 font-mono">&lt;no-reply@reachinbox.com&gt;</span>
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        to: <span className="text-slate-900 font-medium">{selectedEmail.recipientEmail || 'Unspecified Recipient'}</span>
                       </p>
                     </div>
                   </div>
 
-                  <div className="text-right font-mono text-xs text-slate-400">
-                    <p>
+                  <div className="text-left sm:text-right text-xs text-slate-500 font-medium font-sans border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-200">
+                    <p className="text-slate-700 font-semibold">
                       {selectedEmail.sentAt
-                        ? new Date(selectedEmail.sentAt).toLocaleString()
+                        ? new Date(selectedEmail.sentAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
                         : selectedEmail.scheduledAt
-                        ? new Date(selectedEmail.scheduledAt).toLocaleString()
-                        : new Date(selectedEmail.createdAt).toLocaleString()}
+                        ? new Date(selectedEmail.scheduledAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                        : new Date(selectedEmail.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      {selectedEmail.sentAt
+                        ? new Date(selectedEmail.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                        : selectedEmail.scheduledAt
+                        ? new Date(selectedEmail.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : new Date(selectedEmail.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 </div>
 
-                {/* Email Body Content (15px font size, 1.8 line height) */}
-                <div className="text-[15px] leading-[1.8] text-[#1E293B] font-sans min-h-[200px]">
-                  {selectedEmail.bodyHtml ? (
-                    <div dangerouslySetInnerHTML={{ __html: selectedEmail.bodyHtml }} />
-                  ) : (
-                    <p className="whitespace-pre-wrap">{selectedEmail.bodyText || 'No body content available.'}</p>
-                  )}
+                {/* Email Body Canvas */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 sm:p-8 shadow-2xs">
+                  <div className="prose max-w-none text-[15px] leading-relaxed text-slate-800 font-sans break-words overflow-hidden space-y-4">
+                    {selectedEmail.bodyHtml ? (
+                      <div
+                        className="email-rendered-body [&>p]:mb-4 [&>h1]:text-xl [&>h1]:font-bold [&>h1]:mb-3 [&>h2]:text-lg [&>h2]:font-bold [&>h2]:mb-2 [&>ul]:list-disc [&>ul]:pl-5 [&>ul]:mb-4 [&>ol]:list-decimal [&>ol]:pl-5 [&>ol]:mb-4 [&>a]:text-emerald-600 [&>a]:underline [&>blockquote]:border-l-4 [&>blockquote]:border-slate-300 [&>blockquote]:pl-4 [&>blockquote]:italic [&>blockquote]:text-slate-600"
+                        dangerouslySetInnerHTML={{ __html: selectedEmail.bodyHtml }}
+                      />
+                    ) : (
+                      <p className="whitespace-pre-wrap text-slate-800">{selectedEmail.bodyText || 'No message body content available.'}</p>
+                    )}
+                  </div>
                 </div>
 
-                {/* Compact Bordered Attachment Card (Rendered only when email has attachments) */}
+                {/* Compact Bordered Attachment Card */}
                 {selectedEmail.attachments && selectedEmail.attachments.length > 0 && (
-                  <div className="pt-6 border-t border-slate-100">
+                  <div className="pt-4 border-t border-slate-100">
                     <p className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wider font-mono">
                       Attachments ({selectedEmail.attachments.length})
                     </p>
                     <div className="space-y-2">
                       {selectedEmail.attachments.map((att: any, idx: number) => (
-                        <div key={idx} className="border border-slate-200 rounded-lg p-3 bg-slate-50 flex items-center justify-between max-w-sm">
+                        <div key={idx} className="border border-slate-200 rounded-xl p-3 bg-slate-50 flex items-center justify-between max-w-sm">
                           <div className="flex items-center gap-3">
                             <Paperclip className="w-4 h-4 text-slate-500" />
                             <div>
