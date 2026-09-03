@@ -4,7 +4,7 @@ import { env } from './env';
 export const EMAIL_INDEX_NAME = 'emails';
 
 export const esClient = new Client({
-  node: env.ELASTICSEARCH_NODE,
+  node: env.ELASTICSEARCH_URL || env.ELASTICSEARCH_NODE,
 });
 
 export const initElasticsearch = async (): Promise<void> => {

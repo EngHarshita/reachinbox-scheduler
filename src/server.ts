@@ -10,10 +10,12 @@ import { initElasticsearch } from './config/elasticsearch';
 // Initialize BullMQ Queue Event Listeners
 import './queues/email.events';
 
-// Start Worker Supervision Process
-startWorkers();
+// Start Worker Supervision Process (disabled in Web API service if dedicated worker service runs)
+if (process.env.START_IN_PROCESS_WORKER !== 'false') {
+  startWorkers();
+}
 
-const server = app.listen(env.PORT, async () => {
+const server = app.listen(env.PORT, '0.0.0.0', async () => {
   console.log(`[Server]: Server running in ${env.NODE_ENV} mode on port ${env.PORT}`);
   console.log(`[Server]: Health check available at http://localhost:${env.PORT}/health`);
 
